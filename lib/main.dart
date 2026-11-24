@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'ai_service.dart';
 
 void main() {
   runApp(const NhAiAgentApp());
@@ -82,11 +83,16 @@ class _AgentHomeState extends State<AgentHome> {
 
   Future<void> _run(Plan plan) async {
     setState(() => plan.state = 'running');
-    await Future.delayed(const Duration(milliseconds: 600));
+    String result = 'সম্পন্ন হয়েছে';
+    if (plan.category == 'সাধারণ') {
+      result = await AiService.ask(plan.text);
+    } else {
+      await Future.delayed(const Duration(milliseconds: 600));
+    }
     if (!mounted) return;
     setState(() {
       plan.state = 'done';
-      plan.log = 'সম্পন্ন হয়েছে';
+      plan.log = result;
     });
   }
 
@@ -280,10 +286,10 @@ class _AgentHomeState extends State<AgentHome> {
               Text(statusText, style: TextStyle(fontSize: 11, color: pending ? kWarn : kMuted)),
             ],
           ),
-          const SizedBox(height: 4),
+          const SizedBox(height: 6),
           Text(
             plan.log.isEmpty ? plan.category : '${plan.category} · ${plan.log}',
-            style: const TextStyle(fontSize: 13, color: kMuted),
+            style: const TextStyle(fontSize: 13, color: kMuted, height: 1.5),
           ),
           if (pending) ...[
             const SizedBox(height: 12),
