@@ -1,15 +1,16 @@
 import 'package:flutter/material.dart';
 
-void main() => runApp(const NhAiAgentApp());
+void main() {
+  runApp(const NhAiAgentApp());
+}
 
-const _bg = Color(0xFF07080D);
-const _surface = Color(0x0FFFFFFF);
-const _border = Color(0x17FFFFFF);
-const _muted = Color(0xFF8A8FA3);
-const _accentA = Color(0xFF7C8CFF);
-const _accentB = Color(0xFF36E3C4);
-const _warn = Color(0xFFFFB547);
-const _grad = LinearGradient(colors: [_accentA, _accentB]);
+const Color kBg = Color(0xFF07080D);
+const Color kSurface = Color(0xFF13151E);
+const Color kBorder = Color(0xFF222636);
+const Color kMuted = Color(0xFF8A8FA3);
+const Color kAccentA = Color(0xFF7C8CFF);
+const Color kAccentB = Color(0xFF36E3C4);
+const Color kWarn = Color(0xFFFFB547);
 
 class NhAiAgentApp extends StatelessWidget {
   const NhAiAgentApp({super.key});
@@ -21,61 +22,64 @@ class NhAiAgentApp extends StatelessWidget {
       debugShowCheckedModeBanner: false,
       theme: ThemeData(
         brightness: Brightness.dark,
-        scaffoldBackgroundColor: _bg,
-        colorScheme: const ColorScheme.dark(primary: _accentA, secondary: _accentB),
+        scaffoldBackgroundColor: kBg,
+        colorScheme: const ColorScheme.dark(primary: kAccentA, secondary: kAccentB),
         useMaterial3: true,
       ),
-      home: const AgentShell(),
+      home: const AgentHome(),
     );
   }
 }
 
-/// A command becomes a plan. Read-only plans run immediately; anything that
-/// sends, changes or sets something waits for the user's approval.
 class Plan {
-  Plan({required this.id, required this.text, required this.category, required this.readOnly});
-  final int id;
+  Plan(this.text, this.category);
   final String text;
   final String category;
-  final bool readOnly;
   String state = 'pending';
   String log = '';
 }
 
-class AgentShell extends StatefulWidget {
-  const AgentShell({super.key});
+class AgentHome extends StatefulWidget {
+  const AgentHome({super.key});
+
   @override
-  State<AgentShell> createState() => _AgentShellState();
+  State<AgentHome> createState() => _AgentHomeState();
 }
 
-class _AgentShellState extends State<AgentShell> {
+class _AgentHomeState extends State<AgentHome> {
+  final List<Plan> _plans = [];
+  final TextEditingController _controller = TextEditingController();
   int _tab = 0;
-  final _plans = <Plan>[];
-  final _controller = TextEditingController();
-  int _nextId = 1;
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
 
   List<Plan> get _pending => _plans.where((p) => p.state == 'pending').toList();
 
   String _classify(String t) {
     if (t.contains('ইমেইল')) return 'ইমেইল';
-    if (RegExp('ভিডিও|থাম্বনেল|শিরোনাম|ইউটিউব').hasMatch(t)) return 'ইউটিউব';
-    if (RegExp('মেসেজ|বস|হোয়াটসঅ্যাপ').hasMatch(t)) return 'হোয়াটসঅ্যাপ';
-    if (RegExp('অ্যালার্ম|স্টোরেজ|ব্যাটারি|রিমাইন্ডার|ফোন').hasMatch(t)) return 'মোবাইল';
+    if (t.contains('ভিডিও') || t.contains('থাম্বনেল') || t.contains('ইউটিউব')) return 'ইউটিউব';
+    if (t.contains('মেসেজ') || t.contains('বস') || t.contains('হোয়াটসঅ্যাপ')) return 'হোয়াটসঅ্যাপ';
+    if (t.contains('অ্যালার্ম') || t.contains('রিমাইন্ডার') || t.contains('ফোন')) return 'মোবাইল';
     return 'সাধারণ';
   }
 
   void _submit(String raw) {
-    final text = raw.trim();
+    final String text = raw.trim();
     if (text.isEmpty) return;
-    final readOnly = RegExp('দেখাও|সারাংশ|চেক|পরামর্শ').hasMatch(text) &&
-        !RegExp('পাঠাও|সেট|চালু|বানাও|উন্নত|খসড়া').hasMatch(text);
-    final plan = Plan(id: _nextId++, text: text, category: _classify(text), readOnly: readOnly);
+    final Plan plan = Plan(text, _classify(text));
+    final bool readOnly =
+        text.contains('দেখাও') || text.contains('সারাংশ') || text.contains('চেক');
     setState(() => _plans.add(plan));
     _controller.clear();
-    if (readOnly) _run(plan);
+    if (readOnly) {
+      _run(plan);
+    }
   }
 
-  // Placeholder execution. Real connectors (Gmail, etc.) plug in here.
   Future<void> _run(Plan plan) async {
     setState(() => plan.state = 'running');
     await Future.delayed(const Duration(milliseconds: 600));
@@ -86,27 +90,21 @@ class _AgentShellState extends State<AgentShell> {
     });
   }
 
-  void _approve(Plan plan) => _run(plan);
-
-  void _cancel(Plan plan) => setState(() {
-        plan.state = 'cancelled';
-        plan.log = 'বাতিল করা হয়েছে';
-      });
-
-  @override
-  void dispose() {
-    _controller.dispose();
-    super.dispose();
+  void _cancel(Plan plan) {
+    setState(() {
+      plan.state = 'cancelled';
+      plan.log = 'বাতিল করা হয়েছে';
+    });
   }
 
   @override
   Widget build(BuildContext context) {
-    final pages = [
-      _HomePage(pending: _pending, onApprove: _approve, onCancel: _cancel, onCommand: _submit),
-      _ActivityPage(plans: _plans.reversed.toList(), onApprove: _approve, onCancel: _cancel),
-      _CategoryPage(title: 'ইমেইল', commands: const ['ইমেইল সারাংশ দেখাও', 'জরুরি ইমেইলের উত্তর খসড়া করো'], onCommand: _submit),
-      _CategoryPage(title: 'ইউটিউব', commands: const ['ভিডিওর স্ক্রিপ্ট বানাও', 'আমার সাম্প্রতিক ভিডিও চেক করো', 'থাম্বনেল ডিজাইন করো'], onCommand: _submit),
-      _CategoryPage(title: 'হোয়াটসঅ্যাপ', commands: const ['সব অপঠিত মেসেজের সারাংশ দাও', 'বসের মেসেজের উত্তর পাঠাও'], onCommand: _submit),
+    final List<Widget> pages = <Widget>[
+      _buildHome(),
+      _buildActivity(),
+      _buildCategory('ইমেইল', ['ইমেইল সারাংশ দেখাও', 'জরুরি ইমেইলের উত্তর খসড়া করো']),
+      _buildCategory('ইউটিউব', ['ভিডিওর স্ক্রিপ্ট বানাও', 'আমার সাম্প্রতিক ভিডিও চেক করো', 'থাম্বনেল ডিজাইন করো']),
+      _buildCategory('হোয়াটসঅ্যাপ', ['সব অপঠিত মেসেজের সারাংশ দাও', 'বসের মেসেজের উত্তর পাঠাও']),
     ];
 
     return Scaffold(
@@ -114,17 +112,17 @@ class _AgentShellState extends State<AgentShell> {
         bottom: false,
         child: Column(
           children: [
-            _Header(pendingCount: _pending.length),
-            Expanded(child: IndexedStack(index: _tab, children: pages)),
-            _Composer(controller: _controller, onSubmit: _submit),
+            _header(),
+            Expanded(
+              child: IndexedStack(index: _tab, children: pages),
+            ),
+            _composer(),
           ],
         ),
       ),
       bottomNavigationBar: NavigationBar(
-        backgroundColor: _surface,
-        indicatorColor: _accentA.withValues(alpha: 0.2),
         selectedIndex: _tab,
-        onDestinationSelected: (i) => setState(() => _tab = i),
+        onDestinationSelected: (int i) => setState(() => _tab = i),
         destinations: const [
           NavigationDestination(icon: Icon(Icons.home_outlined), label: 'হোম'),
           NavigationDestination(icon: Icon(Icons.list_alt_outlined), label: 'কার্যকলাপ'),
@@ -135,14 +133,9 @@ class _AgentShellState extends State<AgentShell> {
       ),
     );
   }
-}
 
-class _Header extends StatelessWidget {
-  const _Header({required this.pendingCount});
-  final int pendingCount;
-
-  @override
-  Widget build(BuildContext context) {
+  Widget _header() {
+    final int count = _pending.length;
     return Padding(
       padding: const EdgeInsets.fromLTRB(20, 12, 20, 8),
       child: Row(
@@ -151,118 +144,186 @@ class _Header extends StatelessWidget {
             width: 40,
             height: 40,
             alignment: Alignment.center,
-            decoration: BoxDecoration(gradient: _grad, borderRadius: BorderRadius.circular(12)),
-            child: const Text('N', style: TextStyle(color: _bg, fontWeight: FontWeight.w700)),
+            decoration: BoxDecoration(
+              gradient: const LinearGradient(colors: [kAccentA, kAccentB]),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: const Text('N', style: TextStyle(color: kBg, fontWeight: FontWeight.w700)),
           ),
           const SizedBox(width: 12),
           const Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text('NHAI Agent', style: TextStyle(fontSize: 17, fontWeight: FontWeight.w600)),
-                Text('সক্রিয় · অনুমোদন ছাড়া কিছু করবে না', style: TextStyle(fontSize: 12, color: _muted)),
-              ],
-            ),
+            child: Text('NHAI Agent', style: TextStyle(fontSize: 17, fontWeight: FontWeight.w600)),
           ),
-          if (pendingCount > 0)
+          if (count > 0)
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
-              decoration: BoxDecoration(color: _warn, borderRadius: BorderRadius.circular(999)),
-              child: Text('$pendingCount', style: const TextStyle(color: _bg, fontWeight: FontWeight.w700)),
+              decoration: BoxDecoration(color: kWarn, borderRadius: BorderRadius.circular(999)),
+              child: Text('$count', style: const TextStyle(color: kBg, fontWeight: FontWeight.w700)),
             ),
         ],
       ),
     );
   }
-}
 
-class _Composer extends StatelessWidget {
-  const _Composer({required this.controller, required this.onSubmit});
-  final TextEditingController controller;
-  final void Function(String) onSubmit;
-
-  @override
-  Widget build(BuildContext context) {
+  Widget _composer() {
     return Padding(
       padding: const EdgeInsets.fromLTRB(14, 8, 14, 10),
-      child: Container(
-        padding: const EdgeInsets.only(left: 16, right: 6, top: 6, bottom: 6),
-        decoration: BoxDecoration(
-          color: const Color(0x14FFFFFF),
-          border: Border.all(color: _border),
-          borderRadius: BorderRadius.circular(999),
-        ),
-        child: Row(
-          children: [
-            Expanded(
-              child: TextField(
-                controller: controller,
-                onSubmitted: onSubmit,
-                decoration: const InputDecoration(
-                  hintText: 'একটি কমান্ড লিখুন…',
-                  hintStyle: TextStyle(color: _muted),
-                  border: InputBorder.none,
+      child: Row(
+        children: [
+          Expanded(
+            child: TextField(
+              controller: _controller,
+              onSubmitted: _submit,
+              decoration: InputDecoration(
+                hintText: 'একটি কমান্ড লিখুন…',
+                filled: true,
+                fillColor: kSurface,
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(999),
+                  borderSide: const BorderSide(color: kBorder),
                 ),
               ),
             ),
-            IconButton.filled(
-              onPressed: () => onSubmit(controller.text),
-              icon: const Icon(Icons.arrow_upward, color: _bg),
-              style: IconButton.styleFrom(backgroundColor: _accentA),
-            ),
-          ],
-        ),
+          ),
+          const SizedBox(width: 8),
+          IconButton.filled(
+            onPressed: () => _submit(_controller.text),
+            icon: const Icon(Icons.arrow_upward),
+          ),
+        ],
       ),
     );
   }
-}
 
-class _HomePage extends StatelessWidget {
-  const _HomePage({required this.pending, required this.onApprove, required this.onCancel, required this.onCommand});
-  final List<Plan> pending;
-  final void Function(Plan) onApprove;
-  final void Function(Plan) onCancel;
-  final void Function(String) onCommand;
-
-  @override
-  Widget build(BuildContext context) {
+  Widget _buildHome() {
     return ListView(
       padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
       children: [
-        const _Label('অপেক্ষমাণ অনুমোদন'),
-        if (pending.isEmpty)
-          const _Empty('কোনো অপেক্ষমাণ অনুমোদন নেই')
+        _label('অপেক্ষমাণ অনুমোদন'),
+        if (_pending.isEmpty)
+          _empty('কোনো অপেক্ষমাণ অনুমোদন নেই')
         else
-          ...pending.map((p) => _PlanCard(plan: p, onApprove: onApprove, onCancel: onCancel)),
-        const _Label('দ্রুত কমান্ড'),
+          ..._pending.map(_planCard),
+        _label('দ্রুত কমান্ড'),
         Wrap(
           spacing: 10,
           runSpacing: 10,
-          children: const [
-            'আজকের কাজের সারাংশ দাও',
-            'ইমেইল সারাংশ দেখাও',
-            'একটি রিমাইন্ডার সেট করো',
-          ].map((c) => ActionChip(label: Text(c), onPressed: () => onCommand(c))).toList(),
+          children: [
+            for (final String c in ['আজকের কাজের সারাংশ দাও', 'ইমেইল সারাংশ দেখাও', 'একটি রিমাইন্ডার সেট করো'])
+              ActionChip(label: Text(c), onPressed: () => _submit(c)),
+          ],
         ),
       ],
     );
   }
-}
 
-class _ActivityPage extends StatelessWidget {
-  const _ActivityPage({required this.plans, required this.onApprove, required this.onCancel});
-  final List<Plan> plans;
-  final void Function(Plan) onApprove;
-  final void Function(Plan) onCancel;
-
-  @override
-  Widget build(BuildContext context) {
-    if (plans.isEmpty) return const _Empty('এখনো কোনো কমান্ড দেওয়া হয়নি');
+  Widget _buildActivity() {
+    if (_plans.isEmpty) {
+      return _empty('এখনো কোনো কমান্ড দেওয়া হয়নি');
+    }
     return ListView(
       padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
-      children: plans.map((p) => _PlanCard(plan: p, onApprove: onApprove, onCancel: onCancel)).toList(),
+      children: _plans.reversed.map(_planCard).toList(),
+    );
+  }
+
+  Widget _buildCategory(String title, List<String> commands) {
+    return ListView(
+      padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+      children: [
+        _label(title),
+        for (final String c in commands)
+          Container(
+            margin: const EdgeInsets.only(bottom: 10),
+            decoration: BoxDecoration(
+              color: kSurface,
+              border: Border.all(color: kBorder),
+              borderRadius: BorderRadius.circular(18),
+            ),
+            child: ListTile(
+              title: Text(c),
+              trailing: const Icon(Icons.arrow_forward_ios, size: 14, color: kMuted),
+              onTap: () => _submit(c),
+            ),
+          ),
+      ],
+    );
+  }
+
+  Widget _planCard(Plan plan) {
+    final bool pending = plan.state == 'pending';
+    String statusText = 'বাতিল';
+    if (plan.state == 'pending') {
+      statusText = 'অনুমোদন দরকার';
+    } else if (plan.state == 'running') {
+      statusText = 'চলছে';
+    } else if (plan.state == 'done') {
+      statusText = 'সম্পন্ন';
+    }
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 10),
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: kSurface,
+        border: Border.all(color: pending ? kWarn : kBorder),
+        borderRadius: BorderRadius.circular(18),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: Text(plan.text, style: const TextStyle(fontWeight: FontWeight.w600)),
+              ),
+              Text(statusText, style: TextStyle(fontSize: 11, color: pending ? kWarn : kMuted)),
+            ],
+          ),
+          const SizedBox(height: 4),
+          Text(
+            plan.log.isEmpty ? plan.category : '${plan.category} · ${plan.log}',
+            style: const TextStyle(fontSize: 13, color: kMuted),
+          ),
+          if (pending) ...[
+            const SizedBox(height: 12),
+            Row(
+              children: [
+                Expanded(
+                  child: OutlinedButton(
+                    onPressed: () => _cancel(plan),
+                    child: const Text('বাতিল'),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: FilledButton(
+                    onPressed: () => _run(plan),
+                    child: const Text('চালাও'),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _label(String text) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(4, 16, 4, 10),
+      child: Text(
+        text,
+        style: const TextStyle(fontSize: 12, color: kMuted, fontWeight: FontWeight.w600),
+      ),
+    );
+  }
+
+  Widget _empty(String text) {
+    return Padding(
+      padding: const EdgeInsets.all(28),
+      child: Center(child: Text(text, style: const TextStyle(color: kMuted))),
     );
   }
 }
-
-class _CategoryPage extends StatelessWidget {
