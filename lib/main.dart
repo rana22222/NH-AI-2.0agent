@@ -1,5 +1,11 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_tts/flutter_tts.dart';
+import 'package:speech_to_text/speech_to_text.dart' as stt;
+import 'package:url_launcher/url_launcher.dart';
+
+import 'actions.dart';
 import 'ai_service.dart';
+import 'notify.dart';
 
 void main() {
   runApp(const NhAiAgentApp());
@@ -33,7 +39,8 @@ class NhAiAgentApp extends StatelessWidget {
 }
 
 class Plan {
-  Plan(this.text, this.category);
+  Plan(this.id, this.text, this.category);
+  final int id;
   final String text;
   final String category;
   String state = 'pending';
@@ -50,15 +57,79 @@ class AgentHome extends StatefulWidget {
 class _AgentHomeState extends State<AgentHome> {
   final List<Plan> _plans = [];
   final TextEditingController _controller = TextEditingController();
+  final stt.SpeechToText _speech = stt.SpeechToText();
+  final FlutterTts _tts = FlutterTts();
   int _tab = 0;
+  int _nextId = 1;
+  bool _listening = false;
+  bool _speakReplies = true;
+  String? _sttLocale;
+
+  @override
+  void initState() {
+    super.initState();
+    _initVoice();
+    NotifyService.init();
+  }
 
   @override
   void dispose() {
     _controller.dispose();
+    _speech.stop();
+    _tts.stop();
     super.dispose();
   }
 
-  List<Plan> get _pending => _plans.where((p) => p.state == 'pending').toList();
+  Future<void> _initVoice() async {
+    try {
+      await _speech.initialize();
+      final List<stt.LocaleName> locales = await _speech.locales();
+      for (final stt.LocaleName l in locales) {
+        if (l.localeId.toLowerCase().startsWith('bn')) {
+          _sttLocale = l.localeId;
+          break;
+        }
+      }
+    } catch (_) {}
+    try {
+      await _tts.setLanguage('bn-BD');
+      await _tts.setSpeechRate(0.5);
+    } catch (_) {}
+  }
+
+  Future<void> _toggleListen() async {
+    if (_listening) {
+      await _speech.stop();
+      setState(() => _listening = false);
+      return;
+    }
+    final bool ok = await _speech.initialize();
+    if (!ok) {
+      _snack('মাইক্রোফোন চালু করা যাচ্ছে না। অনুমতি দিন।');
+      return;
+    }
+    setState(() => _listening = true);
+    await _speech.listen(
+      localeId: _sttLocale,
+      listenFor: const Duration(seconds: 20),
+      pauseFor: const Duration(seconds: 3),
+      onResult: (stt.SpeechRecognitionResult r) {
+        final String words = r.recognizedWords;
+        _controller.text = words;
+        if (r.finalResult && words.trim().isNotEmpty) {
+          setState(() => _listening = false);
+          _submit(words);
+        }
+      },
+    );
+  }
+
+  void _snack(String msg) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
+  }
+
+  List<Plan> get _pending => _plans.where((Plan p) => p.state == 'pending').toList();
 
   String _classify(String t) {
     if (t.contains('ইমেইল')) return 'ইমেইল';
@@ -68,7 +139,7 @@ class _AgentHomeState extends State<AgentHome> {
     return 'সাধারণ';
   }
 
-  // Only actions that send, change or set something need approval.
+  // শুধু পাঠানো, বদলানো বা সেট করার কাজেই অনুমোদন লাগবে।
   bool _needsApproval(String t) {
     return RegExp('পাঠাও|সেট|চালু|বানাও|উন্নত|খসড়া|মুছ|বাতিল').hasMatch(t);
   }
@@ -76,35 +147,60 @@ class _AgentHomeState extends State<AgentHome> {
   void _submit(String raw) {
     final String text = raw.trim();
     if (text.isEmpty) return;
-    final Plan plan = Plan(text, _classify(text));
-    final bool auto = !_needsApproval(text);
     _controller.clear();
+    final PhoneAction? action = matchAction(text);
+    final Plan plan = Plan(_nextId++, text, action != null ? 'ফোন' : _classify(text));
     setState(() {
-      _plans.insert(0, plan); // নতুনটা সবার উপরে
-      _tab = 1; // কার্যকলাপ ট্যাবে নিয়ে যাবে
+      _plans.insert(0, plan);
+      _tab = 1;
     });
-    if (auto) {
+    if (action != null) {
+      _runAction(plan, action);
+    } else if (!_needsApproval(text)) {
       _run(plan);
     }
+  }
+
+  Future<void> _runAction(Plan plan, PhoneAction action) async {
+    setState(() {
+      plan.state = 'running';
+      plan.log = action.label;
+    });
+    bool ok = false;
+    try {
+      ok = await launchUrl(action.url, mode: LaunchMode.externalApplication);
+    } catch (_) {
+      ok = false;
+    }
+    _finish(plan, ok ? '${action.label}: খোলা হয়েছে।' : 'খোলা যায়নি। ইন্টারনেট বা অ্যাপ দেখুন।');
   }
 
   Future<void> _run(Plan plan) async {
     setState(() {
       plan.state = 'running';
-      plan.log = 'উত্তর খোঁজা হচ্ছে…';
+      plan.log = 'কাজ চলছে…';
     });
     String result;
     if (plan.category == 'সাধারণ') {
       result = await AiService.ask(plan.text);
     } else {
-      await Future.delayed(const Duration(milliseconds: 600));
-      result = 'সম্পন্ন হয়েছে';
+      await Future<void>.delayed(const Duration(milliseconds: 600));
+      result = 'এই কাজের সংযোগ এখনো যুক্ত হয়নি।';
     }
+    _finish(plan, result);
+  }
+
+  void _finish(Plan plan, String result) {
     if (!mounted) return;
     setState(() {
       plan.state = 'done';
       plan.log = result;
     });
+    final String short = result.length > 120 ? '${result.substring(0, 120)}…' : result;
+    NotifyService.show(plan.id, 'NHAI Agent: কাজ শেষ', short);
+    if (_speakReplies) {
+      _tts.speak(result);
+    }
   }
 
   void _cancel(Plan plan) {
@@ -119,9 +215,9 @@ class _AgentHomeState extends State<AgentHome> {
     final List<Widget> pages = <Widget>[
       _buildHome(),
       _buildActivity(),
-      _buildCategory('ইমেইল', ['ইমেইল সারাংশ দেখাও', 'জরুরি ইমেইলের উত্তর খসড়া করো']),
-      _buildCategory('ইউটিউব', ['ভিডিওর স্ক্রিপ্ট বানাও', 'আমার সাম্প্রতিক ভিডিও চেক করো', 'থাম্বনেল ডিজাইন করো']),
-      _buildCategory('হোয়াটসঅ্যাপ', ['সব অপঠিত মেসেজের সারাংশ দাও', 'বসের মেসেজের উত্তর পাঠাও']),
+      _buildCategory('ইমেইল', ['জিমেইল খোলো', 'ইমেইল সারাংশ দেখাও', 'জরুরি ইমেইলের উত্তর খসড়া করো']),
+      _buildCategory('ইউটিউব', ['ইউটিউবে একটা গান চালাও', 'ইউটিউবে ভিডিও সার্চ করো', 'থাম্বনেল ডিজাইন করো']),
+      _buildCategory('ম্যাপ ও অ্যাপ', ['গুগল ম্যাপে ঢাকা খোঁজো', 'ফেসবুক খোলো', 'ক্যালেন্ডার খোলো']),
     ];
 
     return Scaffold(
@@ -130,9 +226,7 @@ class _AgentHomeState extends State<AgentHome> {
         child: Column(
           children: [
             _header(),
-            Expanded(
-              child: IndexedStack(index: _tab, children: pages),
-            ),
+            Expanded(child: IndexedStack(index: _tab, children: pages)),
             _composer(),
           ],
         ),
@@ -145,7 +239,7 @@ class _AgentHomeState extends State<AgentHome> {
           NavigationDestination(icon: Icon(Icons.list_alt_outlined), label: 'কার্যকলাপ'),
           NavigationDestination(icon: Icon(Icons.mail_outline), label: 'ইমেইল'),
           NavigationDestination(icon: Icon(Icons.play_circle_outline), label: 'ইউটিউব'),
-          NavigationDestination(icon: Icon(Icons.chat_outlined), label: 'হোয়াটসঅ্যাপ'),
+          NavigationDestination(icon: Icon(Icons.map_outlined), label: 'ম্যাপ'),
         ],
       ),
     );
@@ -193,7 +287,7 @@ class _AgentHomeState extends State<AgentHome> {
               textInputAction: TextInputAction.send,
               onSubmitted: _submit,
               decoration: InputDecoration(
-                hintText: 'একটি কমান্ড লিখুন…',
+                hintText: _listening ? 'শুনছি…' : 'একটি কমান্ড লিখুন বা বলুন…',
                 filled: true,
                 fillColor: kSurface,
                 border: OutlineInputBorder(
@@ -203,7 +297,16 @@ class _AgentHomeState extends State<AgentHome> {
               ),
             ),
           ),
-          const SizedBox(width: 8),
+          IconButton(
+            onPressed: _toggleListen,
+            tooltip: 'কথা বলুন',
+            icon: Icon(_listening ? Icons.mic : Icons.mic_none, color: _listening ? kWarn : null),
+          ),
+          IconButton(
+            onPressed: () => setState(() => _speakReplies = !_speakReplies),
+            tooltip: 'উত্তর শোনানো',
+            icon: Icon(_speakReplies ? Icons.volume_up_outlined : Icons.volume_off_outlined),
+          ),
           IconButton.filled(
             onPressed: () => _submit(_controller.text),
             icon: const Icon(Icons.arrow_upward),
@@ -219,21 +322,15 @@ class _AgentHomeState extends State<AgentHome> {
       padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
       children: [
         _label('অপেক্ষমাণ অনুমোদন'),
-        if (_pending.isEmpty)
-          _empty('কোনো অপেক্ষমাণ অনুমোদন নেই')
-        else
-          ..._pending.map(_planCard),
+        if (_pending.isEmpty) _empty('কোনো অপেক্ষমাণ অনুমোদন নেই') else ..._pending.map(_planCard),
         _label('সাম্প্রতিক'),
-        if (recent.isEmpty)
-          _empty('এখনো কিছু করা হয়নি')
-        else
-          ...recent.map(_planCard),
+        if (recent.isEmpty) _empty('এখনো কিছু করা হয়নি') else ...recent.map(_planCard),
         _label('দ্রুত কমান্ড'),
         Wrap(
           spacing: 10,
           runSpacing: 10,
           children: [
-            for (final String c in ['আজকের কাজের সারাংশ দাও', 'ইমেইল সারাংশ দেখাও', 'একটি রিমাইন্ডার সেট করো'])
+            for (final String c in ['ফেসবুক খোলো', 'ইউটিউবে একটা গান চালাও', 'গুগল ম্যাপে ঢাকা খোঁজো'])
               ActionChip(label: Text(c), onPressed: () => _submit(c)),
           ],
         ),
@@ -306,9 +403,7 @@ class _AgentHomeState extends State<AgentHome> {
           ),
           const SizedBox(height: 8),
           SelectableText(
-            plan.state == 'done' || plan.state == 'cancelled' || plan.state == 'running'
-                ? (plan.log.isEmpty ? plan.category : plan.log)
-                : plan.category,
+            plan.log.isEmpty ? plan.category : plan.log,
             style: const TextStyle(fontSize: 14, color: kMuted, height: 1.6),
           ),
           if (pending) ...[
