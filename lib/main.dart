@@ -68,26 +68,37 @@ class _AgentHomeState extends State<AgentHome> {
     return 'সাধারণ';
   }
 
+  // Only actions that send, change or set something need approval.
+  bool _needsApproval(String t) {
+    return RegExp('পাঠাও|সেট|চালু|বানাও|উন্নত|খসড়া|মুছ|বাতিল').hasMatch(t);
+  }
+
   void _submit(String raw) {
     final String text = raw.trim();
     if (text.isEmpty) return;
     final Plan plan = Plan(text, _classify(text));
-    final bool readOnly =
-        text.contains('দেখাও') || text.contains('সারাংশ') || text.contains('চেক');
-    setState(() => _plans.add(plan));
+    final bool auto = !_needsApproval(text);
     _controller.clear();
-    if (readOnly) {
+    setState(() {
+      _plans.insert(0, plan); // নতুনটা সবার উপরে
+      _tab = 1; // কার্যকলাপ ট্যাবে নিয়ে যাবে
+    });
+    if (auto) {
       _run(plan);
     }
   }
 
   Future<void> _run(Plan plan) async {
-    setState(() => plan.state = 'running');
-    String result = 'সম্পন্ন হয়েছে';
+    setState(() {
+      plan.state = 'running';
+      plan.log = 'উত্তর খোঁজা হচ্ছে…';
+    });
+    String result;
     if (plan.category == 'সাধারণ') {
       result = await AiService.ask(plan.text);
     } else {
       await Future.delayed(const Duration(milliseconds: 600));
+      result = 'সম্পন্ন হয়েছে';
     }
     if (!mounted) return;
     setState(() {
@@ -179,6 +190,7 @@ class _AgentHomeState extends State<AgentHome> {
           Expanded(
             child: TextField(
               controller: _controller,
+              textInputAction: TextInputAction.send,
               onSubmitted: _submit,
               decoration: InputDecoration(
                 hintText: 'একটি কমান্ড লিখুন…',
@@ -202,6 +214,7 @@ class _AgentHomeState extends State<AgentHome> {
   }
 
   Widget _buildHome() {
+    final List<Plan> recent = _plans.take(3).toList();
     return ListView(
       padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
       children: [
@@ -210,6 +223,11 @@ class _AgentHomeState extends State<AgentHome> {
           _empty('কোনো অপেক্ষমাণ অনুমোদন নেই')
         else
           ..._pending.map(_planCard),
+        _label('সাম্প্রতিক'),
+        if (recent.isEmpty)
+          _empty('এখনো কিছু করা হয়নি')
+        else
+          ...recent.map(_planCard),
         _label('দ্রুত কমান্ড'),
         Wrap(
           spacing: 10,
@@ -229,7 +247,7 @@ class _AgentHomeState extends State<AgentHome> {
     }
     return ListView(
       padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
-      children: _plans.reversed.map(_planCard).toList(),
+      children: _plans.map(_planCard).toList(),
     );
   }
 
@@ -286,10 +304,12 @@ class _AgentHomeState extends State<AgentHome> {
               Text(statusText, style: TextStyle(fontSize: 11, color: pending ? kWarn : kMuted)),
             ],
           ),
-          const SizedBox(height: 6),
-          Text(
-            plan.log.isEmpty ? plan.category : '${plan.category} · ${plan.log}',
-            style: const TextStyle(fontSize: 13, color: kMuted, height: 1.5),
+          const SizedBox(height: 8),
+          SelectableText(
+            plan.state == 'done' || plan.state == 'cancelled' || plan.state == 'running'
+                ? (plan.log.isEmpty ? plan.category : plan.log)
+                : plan.category,
+            style: const TextStyle(fontSize: 14, color: kMuted, height: 1.6),
           ),
           if (pending) ...[
             const SizedBox(height: 12),
