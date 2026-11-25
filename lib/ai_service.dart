@@ -3,7 +3,7 @@ import 'package:http/http.dart' as http;
 
 class AiService {
   static const String _apiKey = String.fromEnvironment('GEMINI_API_KEY');
-  static const String _model = 'gemini-2.5-flash';
+  static const String _model = 'gemini-3.5-flash-lite';
 
   static Future<String> ask(String prompt) async {
     if (_apiKey.isEmpty) {
