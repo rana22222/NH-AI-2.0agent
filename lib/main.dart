@@ -113,10 +113,10 @@ class _AgentHomeState extends State<AgentHome> {
       localeId: _sttLocale,
       listenFor: const Duration(seconds: 20),
       pauseFor: const Duration(seconds: 3),
-      onResult: (stt.SpeechRecognitionResult r) {
-        final String words = r.recognizedWords;
+      onResult: (result) {
+        final String words = result.recognizedWords;
         _controller.text = words;
-        if (r.finalResult && words.trim().isNotEmpty) {
+        if (result.finalResult && words.trim().isNotEmpty) {
           setState(() => _listening = false);
           _submit(words);
         }
