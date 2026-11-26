@@ -11,10 +11,10 @@ const Color _ysAccent = Color(0xFF36E3C4);
 class YoutubeStudioPage extends StatefulWidget {
   const YoutubeStudioPage({super.key});
   @override
-  State&lt;YoutubeStudioPage&gt; createState() => _YoutubeStudioPageState();
+  State<YoutubeStudioPage> createState() => _YoutubeStudioPageState();
 }
 
-class _YoutubeStudioPageState extends State&lt;YoutubeStudioPage&gt; {
+class _YoutubeStudioPageState extends State<YoutubeStudioPage> {
   final TextEditingController _topic = TextEditingController();
   final TextEditingController _instruction = TextEditingController();
   final TextEditingController _script = TextEditingController();
