@@ -180,21 +180,30 @@ class _AgentHomeState extends State<AgentHome> {
   ).hasMatch(text);
 }
 
-  void _submit(String raw) {
+    void _submit(String raw) {
     final String text = raw.trim();
     if (text.isEmpty) return;
+
     _controller.clear();
+
     final PhoneAction? action = matchAction(text);
-    final Plan plan = Plan(_nextId++, text, action != null ? 'ফোন' : _classify(text));
-    setState(() {
-  _plans.insert(0, plan);
+    final Plan plan = Plan(
+      _nextId++,
+      text,
+      action != null ? 'ফোন' : _classify(text),
+    );
 
-  // YouTube কাজ হলে YouTube Studio tab খুলবে।
-  _tab = plan.category == 'ইউটিউব' ? 3 : 1;
-});
-
-  Future<void> _runAction(Plan plan, PhoneAction action) async {
     setState(() {
+      _plans.insert(0, plan);
+      _tab = plan.category == 'ইউটিউব' ? 3 : 1;
+    });
+
+    if (action != null) {
+      _runAction(plan, action);
+    } else if (!_needsApproval(text)) {
+      _run(plan);
+    }
+  }
       plan.state = 'running';
       plan.log = action.label;
     });
