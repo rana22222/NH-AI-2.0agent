@@ -1,0 +1,56 @@
+name: NH AI Agent Cloud APK
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - name: Install Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.27.0'
+      - name: Generate Android project if needed
+        run: |
+          if [ ! -d android ]; then
+            flutter create --platforms=android --org org.rana --project-name nh_ai_agent .
+          fi
+      - name: Set Android min SDK to 24
+        run: |
+          python3 - &'lt;&lt;'PY'
+          from pathlib import Path
+          p = Path('android/app/build.gradle')
+          if not p.exists():
+              p = Path('android/app/build.gradle.kts')
+          if not p.exists():
+              raise SystemExit('Android Gradle file not found')
+          s = p.read_text()
+          replacements = [('minSdkVersion flutter.minSdkVersion', 'minSdkVersion 24'), ('minSdk = flutter.minSdkVersion', 'minSdk = 24')]
+          for old, new in replacements:
+              if old in s:
+                  p.write_text(s.replace(old, new))
+                  print('Set minimum Android SDK to 24 in', p)
+                  break
+          else:
+              if 'minSdkVersion 24' not in s and 'minSdk = 24' not in s:
+                  raise SystemExit('Could not find Flutter minSdk setting to update')
+      - name: Get dependencies
+        run: flutter pub get
+      - name: Build debug APK
+        run: flutter build apk --debug
+      - name: Upload APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name:  h-ai-agent-debug-apk
+          path: build/app/outputs/flutter-apk/app-debug.apk
+          if-no-files-found: error
+          retention-days: 14
