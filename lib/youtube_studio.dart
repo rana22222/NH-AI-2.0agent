@@ -94,7 +94,7 @@ YouTube SEO প্যাকেজ দাও: ৫টি শিরোনাম, �
     }
     final lines = &lt;String&gt;[];
     for (var i = 0; i &lt; sentences.length; i++) {
-      final duration = (sentences[i].length / 12).ceil().clamp(2, 7);
+      final duration = (sentences[i].length / 12).ceil().clamp(2, 7).toInt();
       lines.add('${i + 1}\n${stamp(cursor)} --> ${stamp(cursor + duration)}\n${sentences[i]}');
       cursor += duration;
     }
