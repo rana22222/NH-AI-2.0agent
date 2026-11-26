@@ -1,0 +1,27 @@
+name: Connect YouTube AI Studio v3
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/connect-youtube-studio-v3.yml'
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  connect-studio:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Connect YouTube Studio page
+        run: |
+          sed -i "/import 'notify.dart';/a import 'youtube_studio.dart';" lib/main.dart
+          sed -i "/_buildCategory('ইউটিউব'/s/.*/      const YoutubeStudioPage(),/" lib/main.dart
+          grep -q "import 'youtube_studio.dart';" lib/main.dart
+          grep -q "const YoutubeStudioPage()," lib/main.dart
+      - name: Commit and push
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add lib/main.dart
+          git commit -m "Connect YouTube AI Studio to main app" || exit 0
+          git push
