@@ -6,6 +6,7 @@ import 'package:url_launcher/url_launcher.dart';
 import 'actions.dart';
 import 'ai_service.dart';
 import 'notify.dart';
+import 'youtube_studio.dart';
 
 void main() {
   runApp(const NhAiAgentApp());
@@ -216,7 +217,7 @@ class _AgentHomeState extends State<AgentHome> {
       _buildHome(),
       _buildActivity(),
       _buildCategory('ইমেইল', ['জিমেইল খোলো', 'ইমেইল সারাংশ দেখাও', 'জরুরি ইমেইলের উত্তর খসড়া করো']),
-      _buildCategory('ইউটিউব', ['ইউটিউবে একটা গান চালাও', 'ইউটিউবে ভিডিও সার্চ করো', 'থাম্বনেল ডিজাইন করো']),
+      const YoutubeStudioPage(),
       _buildCategory('ম্যাপ ও অ্যাপ', ['গুগল ম্যাপে ঢাকা খোঁজো', 'ফেসবুক খোলো', 'ক্যালেন্ডার খোলো']),
     ];
 
