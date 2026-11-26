@@ -1,0 +1,57 @@
+name: NH AI Agent Cloud APK v4
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - name: Install Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.35.7'
+      - name: Generate Android project if needed
+        run: |
+          if [ ! -d android ]; then
+            flutter create --platforms=android --org org.rana --project-name nh_ai_agent .
+          fi
+      - name: Configure Android and desugaring
+        shell: bash
+        run: |
+          if [ -f android/app/build.gradle ]; then
+            F=android/app/build.gradle
+            sed -i -E 's/minSdkVersion[[:space:]]+flutter.minSdkVersion/minSdkVersion 24/' "$F"
+            sed -i -E 's/minSdk[[:space:]]*=[[:space:]]*flutter.minSdkVersion/minSdk = 24/' "$F"
+            sed -i -E 's/compileSdkVersion[[:space:]]+flutter.compileSdkVersion/compileSdkVersion 36/' "$F"
+            sed -i -E 's/compileSdk[[:space:]]*=[[:space:]]*flutter.compileSdkVersion/compileSdk = 36/' "$F"
+            printf '%s\n' 'android {' '    compileOptions {' '        coreLibraryDesugaringEnabled true' '    }' '}' 'dependencies {' "    coreLibraryDesugaring 'com.android.tools:desugar_jdk_libs:2.1.4'" '}' >> "$F"
+          elif [ -f android/app/build.gradle.kts ]; then
+            F=android/app/build.gradle.kts
+            sed -i -E 's/minSdk[[:space:]]*=[[:space:]]*flutter.minSdkVersion/minSdk = 24/' "$F"
+            sed -i -E 's/compileSdk[[:space:]]*=[[:space:]]*flutter.compileSdkVersion/compileSdk = 36/' "$F"
+            printf '%s\n' 'android {' '    compileOptions {' '        isCoreLibraryDesugaringEnabled = true' '    }' '}' 'dependencies {' '    coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.4")' '}' >> "$F"
+          else
+            echo 'Android Gradle file not found' >&2
+            exit 1
+          fi
+          grep -nE 'compileSdk|minSdk|coreLibraryDesugaring' "$F"
+      - name: Get dependencies
+        run: flutter pub get
+      - name: Build debug APK
+        run: flutter build apk --debug
+      - name: Upload APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name:  h-ai-agent-debug-apk
+          path: build/app/outputs/flutter-apk/app-debug.apk
+          if-no-files-found: error
+          retention-days: 14  
