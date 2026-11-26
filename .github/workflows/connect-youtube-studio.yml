@@ -1,0 +1,46 @@
+name: Connect YouTube AI Studio
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/connect-youtube-studio.yml'
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  connect-studio:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: true
+      - name: Connect YouTube Studio page
+        run: |
+          python3 - &lt;&lt;'PY'
+          from pathlib import Path
+          path = Path("lib/main.dart")
+          source = path.read_text(encoding="utf-8")
+          if "import 'youtube_studio.dart';" not in source:
+              source = source.replace(
+                  "import 'notify.dart';",
+                  "import 'notify.dart';\\nimport 'youtube_studio.dart';"
+              )
+          old = "_buildCategory('ইউটিউব', ['ইউটিউবে একটা গান চালাও', 'ইউটিউবের ভিডিও সার্চ করো', 'থাম্বনেল ডিজাইন করো']),"
+          if old in source:
+              source = source.replace(old, "const YoutubeStudioPage(),")
+          if "import 'youtube_studio.dart';" not in source or "const YoutubeStudioPage()," not in source:
+              raise SystemExit("Could not find the expected YouTube page entry in lib/main.dart")
+          path.write_text(source, encoding="utf-8")
+          PY
+      - name: Commit and push connection
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add lib/main.dart
+          if ! git diff --cached --quiet; then
+            git commit -m "Connect YouTube AI Studio to main app"
+            git push
+          else
+            echo "YouTube Studio is already connected."
+          fi
