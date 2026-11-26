@@ -133,17 +133,52 @@ class _AgentHomeState extends State<AgentHome> {
   List<Plan> get _pending => _plans.where((Plan p) => p.state == 'pending').toList();
 
   String _classify(String t) {
-    if (t.contains('ইমেইল')) return 'ইমেইল';
-    if (t.contains('ভিডিও') || t.contains('থাম্বনেল') || t.contains('ইউটিউব')) return 'ইউটিউব';
-    if (t.contains('মেসেজ') || t.contains('বস') || t.contains('হোয়াটসঅ্যাপ')) return 'হোয়াটসঅ্যাপ';
-    if (t.contains('অ্যালার্ম') || t.contains('রিমাইন্ডার') || t.contains('ফোন')) return 'মোবাইল';
-    return 'সাধারণ';
+  final String text = t.toLowerCase();
+
+  if (text.contains('ইমেইল') ||
+      text.contains('জিমেইল') ||
+      text.contains('gmail')) {
+    return 'ইমেইল';
   }
+
+  if (text.contains('ভিডিও') ||
+      text.contains('থাম্বনেল') ||
+      text.contains('thumbnail') ||
+      text.contains('ইউটিউব') ||
+      text.contains('youtube') ||
+      text.contains('স্ক্রিপ্ট') ||
+      text.contains('script') ||
+      text.contains('shorts') ||
+      text.contains('seo') ||
+      text.contains('স্টোরিবোর্ড')) {
+    return 'ইউটিউব';
+  }
+
+  if (text.contains('মেসেজ') ||
+      text.contains('বস') ||
+      text.contains('হোয়াটসঅ্যাপ') ||
+      text.contains('whatsapp')) {
+    return 'হোয়াটসঅ্যাপ';
+  }
+
+  if (text.contains('অ্যালার্ম') ||
+      text.contains('রিমাইন্ডার') ||
+      text.contains('ফোন')) {
+    return 'মোবাইল';
+  }
+
+  return 'সাধারণ';
+}
 
   // শুধু পাঠানো, বদলানো বা সেট করার কাজেই অনুমোদন লাগবে।
   bool _needsApproval(String t) {
-    return RegExp('পাঠাও|সেট|চালু|বানাও|উন্নত|খসড়া|মুছ|বাতিল').hasMatch(t);
-  }
+  final String text = t.toLowerCase();
+
+  return RegExp(
+    'পাঠাও|সেন্ড|send|publish|প্রকাশ করো|'
+    'মুছ|delete|বাতিল|পেমেন্ট|payment',
+  ).hasMatch(text);
+}
 
   void _submit(String raw) {
     final String text = raw.trim();
@@ -152,15 +187,11 @@ class _AgentHomeState extends State<AgentHome> {
     final PhoneAction? action = matchAction(text);
     final Plan plan = Plan(_nextId++, text, action != null ? 'ফোন' : _classify(text));
     setState(() {
-      _plans.insert(0, plan);
-      _tab = 1;
-    });
-    if (action != null) {
-      _runAction(plan, action);
-    } else if (!_needsApproval(text)) {
-      _run(plan);
-    }
-  }
+  _plans.insert(0, plan);
+
+  // YouTube কাজ হলে YouTube Studio tab খুলবে।
+  _tab = plan.category == 'ইউটিউব' ? 3 : 1;
+});
 
   Future<void> _runAction(Plan plan, PhoneAction action) async {
     setState(() {
@@ -177,19 +208,73 @@ class _AgentHomeState extends State<AgentHome> {
   }
 
   Future<void> _run(Plan plan) async {
-    setState(() {
-      plan.state = 'running';
-      plan.log = 'কাজ চলছে…';
-    });
-    String result;
-    if (plan.category == 'সাধারণ') {
-      result = await AiService.ask(plan.text);
-    } else {
-      await Future<void>.delayed(const Duration(milliseconds: 600));
-      result = 'এই কাজের সংযোগ এখনো যুক্ত হয়নি।';
-    }
-    _finish(plan, result);
+  setState(() {
+    plan.state = 'running';
+    plan.log = 'AI কাজ করছে…';
+  });
+
+  final String role;
+
+  switch (plan.category) {
+    case 'ইউটিউব':
+      role =
+          'তুমি NH AI YouTube Studio-এর দক্ষ সহকারী। '
+          'ভিডিও আইডিয়া, সম্পূর্ণ স্ক্রিপ্ট, SEO, '
+          'Title, Thumbnail Concept, Storyboard, '
+          'Shorts এবং Production Plan তৈরি করবে। '
+          'সবকিছু সহজ বাংলায় সাজিয়ে দেবে। '
+          'Thumbnail চাইলে Design Concept, Text, '
+          'Composition, Background, Lighting এবং '
+          'Image Generation Prompt দেবে। '
+          'মনে রাখবে, এই অ্যাপে এখনো সরাসরি Image '
+          'Rendering যুক্ত নেই। ছবি তৈরি হয়েছে বলে '
+          'দাবি করবে না।';
+
+      break;
+
+    case 'ইমেইল':
+      role =
+          'তুমি একজন দক্ষ Email Assistant। '
+          'ইমেইল লেখা, উত্তর তৈরি এবং ইমেইল '
+          'সারাংশ তৈরি করবে। Gmail সংযুক্ত না থাকলে '
+          'ইমেইল পাঠানো বা পড়া হয়েছে বলে দাবি করবে না।';
+
+      break;
+
+    case 'হোয়াটসঅ্যাপ':
+      role =
+          'তুমি একজন WhatsApp Message Assistant। '
+          'ব্যবহারকারীর জন্য সুন্দর মেসেজ তৈরি করবে। '
+          'WhatsApp সংযুক্ত না থাকলে মেসেজ পাঠানো '
+          'হয়েছে বলে দাবি করবে না।';
+
+      break;
+
+    case 'মোবাইল':
+      role =
+          'তুমি Android Phone Assistant। '
+          'ফোনের কাজ, সেটিংস, অ্যালার্ম ও রিমাইন্ডার '
+          'সম্পর্কে সাহায্য করবে। সরাসরি পরিবর্তন '
+          'করতে না পারলে ধাপে ধাপে নির্দেশনা দেবে।';
+
+      break;
+
+    default:
+      role =
+          'তুমি NH AI Agent। ব্যবহারকারীর প্রশ্ন '
+          'ও কাজ বুদ্ধিমত্তার সাথে সমাধান করবে। '
+          'বাস্তবে যা করতে পারবে না, সেটি সম্পন্ন '
+          'হয়েছে বলে দাবি করবে না।';
   }
+
+  final String result = await AiService.ask(
+    '$role\n\n'
+    'ব্যবহারকারীর কাজ:\n'
+    '${plan.text}',
+  );
+
+  _finish(plan, result);
+}
 
   void _finish(Plan plan, String result) {
     if (!mounted) return;
