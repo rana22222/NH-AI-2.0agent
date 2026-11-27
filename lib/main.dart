@@ -204,16 +204,28 @@ class _AgentHomeState extends State<AgentHome> {
       _run(plan);
     }
   }
+        Future<void> _runAction(Plan plan, PhoneAction action) async {
+    setState(() {
       plan.state = 'running';
       plan.log = action.label;
     });
+
     bool ok = false;
     try {
-      ok = await launchUrl(action.url, mode: LaunchMode.externalApplication);
+      ok = await launchUrl(
+        action.url,
+        mode: LaunchMode.externalApplication,
+      );
     } catch (_) {
       ok = false;
     }
-    _finish(plan, ok ? '${action.label}: খোলা হয়েছে।' : 'খোলা যায়নি। ইন্টারনেট বা অ্যাপ দেখুন।');
+
+    _finish(
+      plan,
+      ok
+          ? '${action.label}: খোলা হয়েছে।'
+          : 'খোলা যায়নি। ইন্টারনেট বা অ্যাপ দেখুন।',
+    );
   }
 
   Future<void> _run(Plan plan) async {
