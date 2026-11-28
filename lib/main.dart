@@ -1,5 +1,8 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_tts/flutter_tts.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:speech_to_text/speech_to_text.dart' as stt;
 import 'package:url_launcher/url_launcher.dart';
 
@@ -7,6 +10,7 @@ import 'actions.dart';
 import 'doc_scanner.dart';
 import 'ai_service.dart';
 import 'notify.dart';
+import 'vision_service.dart';
 import 'youtube_studio.dart';
 
 void main() {
@@ -66,6 +70,7 @@ class _AgentHomeState extends State<AgentHome> {
   bool _listening = false;
   bool _speakReplies = true;
   String? _sttLocale;
+  File? _attachment;
 
   @override
   void initState() {
@@ -181,30 +186,81 @@ class _AgentHomeState extends State<AgentHome> {
   ).hasMatch(text);
 }
 
-    void _submit(String raw) {
+  void _submit(String raw) {
     final String text = raw.trim();
-    if (text.isEmpty) return;
+    final File? image = _attachment;
+    if (text.isEmpty && image == null) return;
 
     _controller.clear();
+    final String prompt = text.isEmpty ? 'এই ছবিটা কী? নির্দেশনা দাও' : text;
 
-    final PhoneAction? action = matchAction(text);
+    final PhoneAction? action = image == null ? matchAction(prompt) : null;
     final Plan plan = Plan(
       _nextId++,
-      text,
-      action != null ? 'ফোন' : _classify(text),
+      prompt,
+      action != null ? 'ফোন' : _classify(prompt),
     );
 
     setState(() {
+      _attachment = null;
       _plans.insert(0, plan);
       _tab = plan.category == 'ইউটিউব' ? 3 : 1;
     });
 
-    if (action != null) {
+    if (image != null) {
+      _runVision(plan, image);
+    } else if (action != null) {
       _runAction(plan, action);
-    } else if (!_needsApproval(text)) {
+    } else if (!_needsApproval(prompt)) {
       _run(plan);
     }
   }
+
+  Future<void> _pickAttachment() async {
+    final ImageSource? src = await showModalBottomSheet<ImageSource>(
+      context: context,
+      backgroundColor: kSurface,
+      builder: (BuildContext ctx) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              leading: const Icon(Icons.photo_camera_outlined),
+              title: const Text('ক্যামেরা'),
+              onTap: () => Navigator.pop(ctx, ImageSource.camera),
+            ),
+            ListTile(
+              leading: const Icon(Icons.photo_library_outlined),
+              title: const Text('গ্যালারি থেকে ছবি'),
+              onTap: () => Navigator.pop(ctx, ImageSource.gallery),
+            ),
+          ],
+        ),
+      ),
+    );
+    if (src == null) return;
+    try {
+      final XFile? picked = await ImagePicker().pickImage(
+        source: src,
+        imageQuality: 85,
+        maxWidth: 1600,
+      );
+      if (picked == null) return;
+      setState(() => _attachment = File(picked.path));
+    } catch (_) {
+      _snack('ছবি নেওয়া যায়নি, আবার চেষ্টা করো');
+    }
+  }
+
+  Future<void> _runVision(Plan plan, File image) async {
+    setState(() {
+      plan.state = 'running';
+      plan.log = 'ছবি দেখা হচ্ছে…';
+    });
+    final String result = await VisionService.ask(plan.text, image);
+    _finish(plan, result);
+  }
+
         Future<void> _runAction(Plan plan, PhoneAction action) async {
     setState(() {
       plan.state = 'running';
@@ -387,42 +443,75 @@ class _AgentHomeState extends State<AgentHome> {
   }
 
   Widget _composer() {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(14, 8, 14, 10),
-      child: Row(
-        children: [
-          Expanded(
-            child: TextField(
-              controller: _controller,
-              textInputAction: TextInputAction.send,
-              onSubmitted: _submit,
-              decoration: InputDecoration(
-                hintText: _listening ? 'শুনছি…' : 'একটি কমান্ড লিখুন বা বলুন…',
-                filled: true,
-                fillColor: kSurface,
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(999),
-                  borderSide: const BorderSide(color: kBorder),
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        if (_attachment != null)
+          Padding(
+            padding: const EdgeInsets.fromLTRB(14, 8, 14, 0),
+            child: Row(
+              children: [
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(10),
+                  child: Image.file(_attachment!, width: 56, height: 56, fit: BoxFit.cover),
                 ),
-              ),
+                const SizedBox(width: 8),
+                const Expanded(
+                  child: Text(
+                    'ছবি যুক্ত হয়েছে। নির্দেশনা লিখুন বা সরাসরি পাঠান',
+                    style: TextStyle(color: kMuted, fontSize: 12),
+                  ),
+                ),
+                IconButton(
+                  onPressed: () => setState(() => _attachment = null),
+                  icon: const Icon(Icons.close),
+                ),
+              ],
             ),
           ),
-          IconButton(
-            onPressed: _toggleListen,
-            tooltip: 'কথা বলুন',
-            icon: Icon(_listening ? Icons.mic : Icons.mic_none, color: _listening ? kWarn : null),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(14, 8, 14, 10),
+          child: Row(
+            children: [
+              IconButton(
+                onPressed: _pickAttachment,
+                tooltip: 'ছবি যোগ করুন',
+                icon: const Icon(Icons.add_photo_alternate_outlined),
+              ),
+              Expanded(
+                child: TextField(
+                  controller: _controller,
+                  textInputAction: TextInputAction.send,
+                  onSubmitted: _submit,
+                  decoration: InputDecoration(
+                    hintText: _listening ? 'শুনছি…' : 'একটি কমান্ড লিখুন বা বলুন…',
+                    filled: true,
+                    fillColor: kSurface,
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(999),
+                      borderSide: const BorderSide(color: kBorder),
+                    ),
+                  ),
+                ),
+              ),
+              IconButton(
+                onPressed: _toggleListen,
+                tooltip: 'কথা বলুন',
+                icon: Icon(_listening ? Icons.mic : Icons.mic_none, color: _listening ? kWarn : null),
+              ),
+              IconButton(
+                onPressed: () => setState(() => _speakReplies = !_speakReplies),
+                tooltip: 'উত্তর শোনানো',
+                icon: Icon(_speakReplies ? Icons.volume_up_outlined : Icons.volume_off_outlined),
+              ),
+              IconButton.filled(
+                onPressed: () => _submit(_controller.text),
+                icon: const Icon(Icons.arrow_upward),
+              ),
+            ],
           ),
-          IconButton(
-            onPressed: () => setState(() => _speakReplies = !_speakReplies),
-            tooltip: 'উত্তর শোনানো',
-            icon: Icon(_speakReplies ? Icons.volume_up_outlined : Icons.volume_off_outlined),
-          ),
-          IconButton.filled(
-            onPressed: () => _submit(_controller.text),
-            icon: const Icon(Icons.arrow_upward),
-          ),
-        ],
-      ),
+        ),
+      ],
     );
   }
 
