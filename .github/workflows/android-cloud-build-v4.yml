@@ -44,6 +44,13 @@ jobs:
             exit 1
           fi
           grep -nE 'compileSdk|minSdk|coreLibraryDesugaring' "$F"
+      - name: Add microphone and network permissions
+        shell: bash
+        run: |
+          M=android/app/src/main/AndroidManifest.xml
+          sed -i 's#<manifest \(.*\)>#<manifest \1>\n    <uses-permission android:name="android.permission.RECORD_AUDIO" />\n    <uses-permission android:name="android.permission.INTERNET" />#' "$M"
+          sed -i 's#</manifest>#    <queries>\n        <intent>\n            <action android:name="android.speech.RecognitionService" />\n        </intent>\n    </queries>\n</manifest>#' "$M"
+          grep -n 'permission\|queries' "$M"
       - name: Get dependencies
         run: flutter pub get
       - name: Build debug APK
