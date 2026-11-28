@@ -13,7 +13,6 @@ const Color _kBg = Color(0xFF07080D);
 const Color _kSurface = Color(0xFF13151E);
 const Color _kBorder = Color(0xFF222636);
 const Color _kMuted = Color(0xFF8A8FA3);
-const Color _kAccentA = Color(0xFF7C8CFF);
 const Color _kAccentB = Color(0xFF36E3C4);
 
 enum ScanFilter { original, grayscale, blackWhite }
@@ -25,9 +24,8 @@ class ScanPageItem {
   int quarterTurns = 0;
 }
 
-// Runs off the UI thread: rotate, apply filter, re-encode as JPEG.
-Uint8List _renderPage((Uint8List, int, int) args) {
-  final (bytes, turns, filterIndex) = args;
+// Rotate, apply filter, re-encode as JPEG.
+Uint8List _renderPage(Uint8List bytes, int turns, int filterIndex) {
   img.Image? image = img.decodeImage(bytes);
   if (image == null) return bytes;
 
@@ -96,7 +94,7 @@ class _DocScannerPageState extends State<DocScannerPage> {
 
   Future<Uint8List> _renderFor(ScanPageItem p) async {
     final Uint8List bytes = await p.file.readAsBytes();
-    return compute(_renderPage, (bytes, p.quarterTurns, p.filter.index));
+    return _renderPage(bytes, p.quarterTurns, p.filter.index);
   }
 
   Future<void> _exportPdf() async {
