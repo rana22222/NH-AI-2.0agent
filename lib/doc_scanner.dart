@@ -2,6 +2,7 @@ import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
+import 'package:google_mlkit_document_scanner/google_mlkit_document_scanner.dart';
 import 'package:image/image.dart' as img;
 import 'package:image_picker/image_picker.dart';
 import 'package:path_provider/path_provider.dart';
@@ -18,9 +19,9 @@ const Color _kAccentB = Color(0xFF36E3C4);
 enum ScanFilter { original, grayscale, blackWhite }
 
 class ScanPageItem {
-  ScanPageItem(this.file);
+  ScanPageItem(this.file, {this.filter = ScanFilter.original});
   final File file;
-  ScanFilter filter = ScanFilter.blackWhite;
+  ScanFilter filter;
   int quarterTurns = 0;
 }
 
@@ -52,7 +53,7 @@ Uint8List _renderPage(Uint8List bytes, int turns, int filterIndex) {
     }
   }
 
-  return Uint8List.fromList(img.encodeJpg(image, quality: 85));
+  return Uint8List.fromList(img.encodeJpg(image, quality: 90));
 }
 
 class DocScannerPage extends StatefulWidget {
@@ -75,16 +76,42 @@ class _DocScannerPageState extends State<DocScannerPage> {
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
   }
 
-  Future<void> _addPage(ImageSource source) async {
+  // Camera scan: ML Kit finds the page edges, corrects perspective, and enhances.
+  Future<void> _scanWithCamera() async {
+    if (_busy) return;
+    try {
+      final scanner = DocumentScanner(
+        options: DocumentScannerOptions(
+          documentFormat: DocumentFormat.jpeg,
+          mode: ScannerMode.full,
+          pageLimit: 20,
+          isGalleryImport: true,
+        ),
+      );
+      final DocumentScanningResult result = await scanner.scanDocument();
+      final List<String> paths = result.images;
+      if (paths.isEmpty) return;
+      setState(() {
+        for (final String path in paths) {
+          _pages.add(ScanPageItem(File(path)));
+        }
+        _selected = _pages.length - 1;
+      });
+    } catch (_) {
+      _snack('স্ক্যান করা যায়নি, আবার চেষ্টা করো');
+    }
+  }
+
+  Future<void> _addFromGallery() async {
     try {
       final XFile? picked = await ImagePicker().pickImage(
-        source: source,
+        source: ImageSource.gallery,
         imageQuality: 92,
         maxWidth: 2200,
       );
       if (picked == null) return;
       setState(() {
-        _pages.add(ScanPageItem(File(picked.path)));
+        _pages.add(ScanPageItem(File(picked.path), filter: ScanFilter.original));
         _selected = _pages.length - 1;
       });
     } catch (_) {
@@ -178,7 +205,7 @@ class _DocScannerPageState extends State<DocScannerPage> {
           ),
           const SizedBox(height: 4),
           const Text(
-            'ছবি তুলুন, ফিল্টার দিন, তারপর PDF বানিয়ে শেয়ার করুন।',
+            'ক্যামেরায় স্ক্যান করলে কিনারা নিজে থেকে ধরে সোজা করে দেবে। তারপর PDF বানিয়ে শেয়ার করুন।',
             style: TextStyle(fontSize: 12, color: _kMuted),
           ),
           const SizedBox(height: 14),
@@ -186,15 +213,15 @@ class _DocScannerPageState extends State<DocScannerPage> {
             children: [
               Expanded(
                 child: FilledButton.icon(
-                  onPressed: _busy ? null : () => _addPage(ImageSource.camera),
-                  icon: const Icon(Icons.photo_camera_outlined),
-                  label: const Text('ক্যামেরা'),
+                  onPressed: _busy ? null : _scanWithCamera,
+                  icon: const Icon(Icons.document_scanner_outlined),
+                  label: const Text('ক্যামেরায় স্ক্যান'),
                 ),
               ),
               const SizedBox(width: 10),
               Expanded(
                 child: OutlinedButton.icon(
-                  onPressed: _busy ? null : () => _addPage(ImageSource.gallery),
+                  onPressed: _busy ? null : _addFromGallery,
                   icon: const Icon(Icons.photo_library_outlined),
                   label: const Text('গ্যালারি'),
                 ),
@@ -212,7 +239,7 @@ class _DocScannerPageState extends State<DocScannerPage> {
               ),
               child: const Center(
                 child: Text(
-                  'এখনো কোনো পেজ নেই। ক্যামেরা বা গ্যালারি থেকে যোগ করুন।',
+                  'এখনো কোনো পেজ নেই। ক্যামেরায় স্ক্যান বা গ্যালারি থেকে যোগ করুন।',
                   textAlign: TextAlign.center,
                   style: TextStyle(color: _kMuted),
                 ),
