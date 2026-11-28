@@ -35,6 +35,15 @@ jobs:
           sed -i 's|</manifest>|    <queries>\n        <intent><action android:name="android.speech.RecognitionService"/></intent>\n        <intent><action android:name="android.intent.action.VIEW"/><data android:scheme="https"/></intent>\n    </queries>\n</manifest>|' $M
           grep -c "uses-permission" $M
 
+      - name: Video Studio Android setup
+        run: |
+          G=android/app/build.gradle.kts
+          sed -i 's/minSdk = flutter.minSdkVersion/minSdk = 24/' $G
+          grep -n "minSdk" $G
+          M=android/app/src/main/AndroidManifest.xml
+          sed -i 's|<manifest xmlns:android="http://schemas.android.com/apk/res/android">|&\n    <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" android:maxSdkVersion="28"/>|' $M
+          grep -c "uses-permission" $M
+
       - name: Enable core library desugaring
         run: |
           cat >> android/app/build.gradle.kts <<'EOF'
