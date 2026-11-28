@@ -7,6 +7,7 @@ import 'actions.dart';
 import 'ai_service.dart';
 import 'notify.dart';
 import 'youtube_studio.dart';
+import 'video_studio/video_studio_screen.dart';
 
 void main() {
   runApp(const NhAiAgentApp());
@@ -371,6 +372,13 @@ class _AgentHomeState extends State<AgentHome> {
           const SizedBox(width: 12),
           const Expanded(
             child: Text('NHAI Agent', style: TextStyle(fontSize: 17, fontWeight: FontWeight.w600)),
+          ),
+          IconButton(
+            tooltip: 'ভিডিও স্টুডিও',
+            icon: const Icon(Icons.movie_creation_outlined),
+            onPressed: () => Navigator.of(context).push(
+              MaterialPageRoute<void>(builder: (_) => const VideoStudioScreen()),
+            ),
           ),
           if (count > 0)
             Container(
