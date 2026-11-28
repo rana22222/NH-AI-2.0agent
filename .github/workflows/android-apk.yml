@@ -31,6 +31,13 @@ jobs:
             flutter create --platforms=android --org org.rana --project-name nh_ai_agent .
           fi
 
+      - name: Raise minSdk to 24 for plugins
+        run: |
+          f=android/app/build.gradle
+          [ -f "$f" ] || f=android/app/build.gradle.kts
+          sed -i -E 's/minSdk(Version)? *=? *flutter\.minSdkVersion/minSdk\1 = 24/; s/minSdk(Version)? *=? *21/minSdk\1 = 24/' "$f"
+          grep -n -i 'minsdk' "$f"
+
       - name: Get dependencies
         run: flutter pub get
 
