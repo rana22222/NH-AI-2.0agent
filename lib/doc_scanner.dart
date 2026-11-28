@@ -10,6 +10,8 @@ import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:share_plus/share_plus.dart';
 
+import 'web_studio.dart';
+
 const Color _kBg = Color(0xFF07080D);
 const Color _kSurface = Color(0xFF13151E);
 const Color _kBorder = Color(0xFF222636);
@@ -199,6 +201,15 @@ class _DocScannerPageState extends State<DocScannerPage> {
       child: ListView(
         padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
         children: [
+          OutlinedButton.icon(
+            onPressed: () => Navigator.push(
+              context,
+              MaterialPageRoute<void>(builder: (_) => const WebStudioPage()),
+            ),
+            icon: const Icon(Icons.travel_explore_outlined),
+            label: const Text('ওয়েব অটোমেশন (রেকর্ড ও রিপ্লে)'),
+          ),
+          const SizedBox(height: 14),
           const Text(
             'ডকুমেন্ট স্ক্যানার',
             style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
